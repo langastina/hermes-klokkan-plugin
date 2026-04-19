@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .common import excerpt as _excerpt
+from .common import with_context as _with_context
+
 CONFIG_PATH = Path.home() / ".hermes" / "klokkan" / "config.json"
 ERROR_LOG_PATH = Path.home() / ".cache" / "klokkan" / "last-error.log"
 REQUEST_TIMEOUT_SECONDS = 8
-PROMPT_EXCERPT_CHARS = 120
 
 
 def _log_error(tag: str, message: str) -> None:
@@ -38,59 +39,6 @@ def _load_config() -> dict[str, Any] | None:
         _log_error("config", f"missing required keys: {', '.join(missing)}")
         return None
     return data
-
-
-def _git(args: list[str], cwd: Path) -> str:
-    try:
-        result = subprocess.run(
-            ["git", *args],
-            cwd=str(cwd),
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        return result.stdout.strip()
-    except Exception:
-        return ""
-
-
-def _resolve_repo_root(cwd: Path) -> Path:
-    root = _git(["rev-parse", "--show-toplevel"], cwd)
-    return Path(root) if root else cwd
-
-
-def _derive_default_hint(cwd: Path) -> str:
-    repo_root = _resolve_repo_root(cwd)
-    try:
-        relative = cwd.resolve().relative_to(repo_root.resolve())
-    except Exception:
-        return cwd.name or str(cwd)
-    repo_name = repo_root.name or cwd.name or str(cwd)
-    relative_str = relative.as_posix()
-    if relative_str in ("", "."):
-        return repo_name
-    return f"{repo_name}/{relative_str}"
-
-
-def _session_label(cfg: dict[str, Any], cwd: Path | None = None) -> str:
-    cwd = cwd or Path.cwd()
-    base = (cfg.get("hint") or "").strip() or _derive_default_hint(cwd)
-    branch = _git(["rev-parse", "--abbrev-ref", "HEAD"], cwd)
-    if branch and branch != "HEAD":
-        if base == branch or base.endswith(f"/{branch}") or base.endswith(f" · {branch}"):
-            return base
-        return f"{base} · {branch}"
-    return base
-
-
-def _with_context(cfg: dict[str, Any], suffix: str = "") -> str:
-    label = _session_label(cfg)
-    suffix = suffix.strip()
-    return f"{label} — {suffix}" if suffix else label
-
-
-def _excerpt(text: str) -> str:
-    return " ".join((text or "").split())[:PROMPT_EXCERPT_CHARS].strip()
 
 
 def _request_json(method: str, url: str, api_key: str, payload: dict[str, Any] | None = None) -> tuple[bool, int | None, str]:
