@@ -1,5 +1,5 @@
 name: klokkan
-version: 0.1.0
+version: 0.2.0
 description: "Klokkan time tracking integration for Hermes via plugin hooks and a local loopback auth helper."
 author: Hermes Agent
 provides_hooks:

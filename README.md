@@ -12,11 +12,13 @@ What it does:
 
 - Hermes-native plugin hooks instead of Claude/Cursor/Codex hook files
 - Local-only credentials at `~/.hermes/klokkan/config.json`
+- Optional per-repo `klokkan.md` files for repo-specific hint and description overrides
 - Config file permissions set to `0600`
 - Error logging to `~/.cache/klokkan/last-error.log`
 - Derives a useful install/session hint from the current git repo and subdirectory
 - Adds current git branch to the session label when available
-- No repo-local files and no git exclude mutations required
+- Includes the repo/project name in timer descriptions so entries stay attributable in Klokkan
+- No repo-local files are required, but when `klokkan.md` is used it is read only and never mutated by the plugin
 
 ## Repository layout
 
@@ -92,6 +94,32 @@ Open that URL in your browser. After you choose the org/project in the Klokkan d
 
 with mode `0600`.
 
+## Per-repo overrides with `klokkan.md`
+
+If you want different repositories to register time under different project labels, add a `klokkan.md` file at the repo root.
+
+Example:
+
+```md
+---
+project: argilzar-workouts
+description_prefix: argilzar-workouts
+---
+```
+
+Supported frontmatter keys:
+- `hint` — overrides the saved default hint for this repo
+- `project` or `project_name` — shorthand alias for `hint`
+- `description_prefix` — optional prefix used for the timer description; defaults to the resolved hint
+
+Behavior:
+- the plugin searches upward from the current working directory to the git repo root for `klokkan.md`
+- if found, the repo file wins over the saved `hint` in `~/.hermes/klokkan/config.json`
+- timer descriptions become `<description_prefix> — <prompt excerpt>`
+- the start label still includes the current git branch when available
+
+This makes it easy to keep one Hermes/Klokkan connection while still attributing work to repos such as `mickey-scoreboard` or `argilzar-workouts`.
+
 ## Security model
 
 - Integrity of the official Klokkan upstream installer should still be verified separately if you use it for comparison or auditing.
@@ -121,7 +149,13 @@ When Hermes finalizes a session, the plugin sends a stop request to Klokkan.
 Quick syntax check:
 
 ```bash
-python3 -m py_compile plugin/klokkan/__init__.py plugin/klokkan/connect.py
+python3 -m py_compile plugin/klokkan/__init__.py plugin/klokkan/common.py plugin/klokkan/connect.py
+```
+
+Run tests:
+
+```bash
+python3 -m unittest discover -s tests -v
 ```
 
 ## License

@@ -14,6 +14,11 @@ from threading import Thread
 from typing import Any
 from urllib.parse import parse_qs, urlencode
 
+try:
+    from .common import derive_default_hint, repo_overrides
+except ImportError:  # pragma: no cover - supports direct script execution
+    from common import derive_default_hint, repo_overrides
+
 FRONTEND_URL_DEFAULT = "https://klokkan.usable.dev"
 TIMEOUT_SECONDS = 5 * 60
 CONFIG_PATH = Path.home() / ".hermes" / "klokkan" / "config.json"
@@ -32,43 +37,12 @@ def log_error(tag: str, message: str) -> None:
         pass
 
 
-def git(args: list[str], cwd: Path) -> str:
-    import subprocess
-
-    try:
-        result = subprocess.run(
-            ["git", *args],
-            cwd=str(cwd),
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        return result.stdout.strip()
-    except Exception:
-        return ""
-
-
-def resolve_repo_root(cwd: Path) -> Path:
-    root = git(["rev-parse", "--show-toplevel"], cwd)
-    return Path(root) if root else cwd
-
-
-def derive_hint(cwd: Path) -> str:
-    repo_root = resolve_repo_root(cwd)
-    try:
-        relative = cwd.resolve().relative_to(repo_root.resolve())
-    except Exception:
-        return cwd.name or str(cwd)
-    repo_name = repo_root.name or cwd.name or str(cwd)
-    relative_str = relative.as_posix()
-    if relative_str in ("", "."):
-        return repo_name
-    return f"{repo_name}/{relative_str}"
-
-
 def effective_hint(cwd: Path, provided: str | None) -> str:
     cleaned = (provided or "").strip()
-    return cleaned or derive_hint(cwd)
+    if cleaned:
+        return cleaned
+    overrides = repo_overrides(cwd)
+    return (overrides.get("hint") or derive_default_hint(cwd)).strip()
 
 
 class CallbackState:
