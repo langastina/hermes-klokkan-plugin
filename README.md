@@ -17,6 +17,7 @@ What it does:
 - Error logging to `~/.cache/klokkan/last-error.log`
 - Derives a useful install/session hint from the current git repo and subdirectory
 - Adds current git branch to the session label when available
+- Tags timer descriptions with the current Hermes session ID so each session starts its own timer entry
 - Includes the repo/project name in timer descriptions so entries stay attributable in Klokkan
 - No repo-local files are required, but when `klokkan.md` is used it is read only and never mutated by the plugin
 

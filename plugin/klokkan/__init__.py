@@ -41,6 +41,11 @@ def _load_config() -> dict[str, Any] | None:
     return data
 
 
+def _session_suffix(session_id: Any) -> str:
+    session = str(session_id or "").strip()
+    return f"[session:{session}]" if session else ""
+
+
 def _request_json(method: str, url: str, api_key: str, payload: dict[str, Any] | None = None) -> tuple[bool, int | None, str]:
     data = None
     headers = {"Authorization": f"Bearer {api_key}"}
@@ -64,13 +69,14 @@ def _request_json(method: str, url: str, api_key: str, payload: dict[str, Any] |
         return False, None, str(exc)
 
 
-def _start_or_resume_timer(cfg: dict[str, Any]) -> None:
+def _start_or_resume_timer(cfg: dict[str, Any], session_id: Any = None) -> None:
     api = cfg["apiBaseUrl"].rstrip("/")
+    description = " ".join(part for part in (_with_context(cfg), _session_suffix(session_id)) if part)
     ok, status, body = _request_json(
         "POST",
         f"{api}/api/v1/agent/timer/start",
         cfg["apiKey"],
-        {"description": _with_context(cfg)},
+        {"description": description},
     )
     if not ok:
         _log_error(
@@ -79,16 +85,18 @@ def _start_or_resume_timer(cfg: dict[str, Any]) -> None:
         )
 
 
-def _refine_description(cfg: dict[str, Any], user_message: str) -> None:
+def _refine_description(cfg: dict[str, Any], user_message: str, session_id: Any = None) -> None:
     excerpt = _excerpt(user_message)
     if not excerpt:
         return
     api = cfg["apiBaseUrl"].rstrip("/")
+    session_suffix = _session_suffix(session_id)
+    suffix = f"{session_suffix} — {excerpt}" if session_suffix else excerpt
     ok, status, body = _request_json(
         "PATCH",
         f"{api}/api/v1/agent/timer/running",
         cfg["apiKey"],
-        {"description": _with_context(cfg, excerpt), "onlyIfPlaceholder": True},
+        {"description": _with_context(cfg, suffix), "onlyIfPlaceholder": True},
     )
     if not ok:
         _log_error(
@@ -112,13 +120,13 @@ def _stop_timer(cfg: dict[str, Any]) -> None:
         )
 
 
-def _on_pre_llm_call(user_message: str = "", **kwargs: Any) -> None:
+def _on_pre_llm_call(user_message: str = "", session_id: Any = None, **kwargs: Any) -> None:
     cfg = _load_config()
     if not cfg:
         return None
     try:
-        _start_or_resume_timer(cfg)
-        _refine_description(cfg, user_message)
+        _start_or_resume_timer(cfg, session_id=session_id)
+        _refine_description(cfg, user_message, session_id=session_id)
     except Exception as exc:
         _log_error("pre_llm_call", str(exc))
     return None
