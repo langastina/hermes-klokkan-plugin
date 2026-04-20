@@ -15,15 +15,22 @@ from typing import Any
 from urllib.parse import parse_qs, urlencode
 
 try:
-    from .common import derive_default_hint, repo_overrides
+    from .common import derive_default_hint, ensure_project_config_ignored, project_config_path, repo_overrides
 except ImportError:  # pragma: no cover - supports direct script execution
-    from common import derive_default_hint, repo_overrides
+    from common import derive_default_hint, ensure_project_config_ignored, project_config_path, repo_overrides
 
 FRONTEND_URL_DEFAULT = "https://klokkan.usable.dev"
 TIMEOUT_SECONDS = 5 * 60
 CONFIG_PATH = Path.home() / ".hermes" / "klokkan" / "config.json"
 PLUGIN_DIR = Path.home() / ".hermes" / "plugins" / "klokkan"
 ERROR_LOG_PATH = Path.home() / ".cache" / "klokkan" / "last-error.log"
+
+
+def config_target(cwd: Path) -> tuple[Path, str]:
+    repo_config = project_config_path(cwd)
+    if repo_config:
+        return repo_config, "repo"
+    return CONFIG_PATH, "global"
 
 
 def log_error(tag: str, message: str) -> None:
@@ -118,8 +125,10 @@ def run_listener(expected_state: str) -> tuple[int, CallbackState, HTTPServer]:
     return port, state, server
 
 
-def write_config(creds: dict[str, str], hint: str) -> str:
-    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+def write_config(creds: dict[str, str], hint: str, cwd: Path | None = None) -> str:
+    cwd = cwd or Path.cwd()
+    target_path, scope = config_target(cwd)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
     body = {
         "apiKey": creds["apiKey"],
         "orgId": creds["orgId"],
@@ -130,9 +139,11 @@ def write_config(creds: dict[str, str], hint: str) -> str:
         "apiBaseUrl": creds["apiBaseUrl"],
         "hint": hint,
     }
-    CONFIG_PATH.write_text(json.dumps(body, indent=2) + "\n")
-    CONFIG_PATH.chmod(0o600)
-    return str(CONFIG_PATH)
+    target_path.write_text(json.dumps(body, indent=2) + "\n")
+    target_path.chmod(0o600)
+    if scope == "repo":
+        ensure_project_config_ignored(cwd)
+    return str(target_path)
 
 
 def check_api(api_base_url: str, api_key: str) -> dict[str, Any]:
@@ -170,6 +181,7 @@ def check_api(api_base_url: str, api_key: str) -> dict[str, Any]:
 
 
 def dry_run(frontend_url: str, hint: str) -> dict[str, Any]:
+    target_path, scope = config_target(Path.cwd())
     return {
         "mode": "dry-run",
         "agent": "hermes",
@@ -181,11 +193,12 @@ def dry_run(frontend_url: str, hint: str) -> dict[str, Any]:
             "plugin_dir": str(PLUGIN_DIR),
             "plugin_manifest": str(PLUGIN_DIR / "plugin.yaml"),
             "plugin_module": str(PLUGIN_DIR / "__init__.py"),
-            "runtime_config": str(CONFIG_PATH),
+            "runtime_config": str(target_path),
         },
         "credentials": {
             "source": "browser -> 127.0.0.1 loopback POST",
-            "stored_at": str(CONFIG_PATH),
+            "scope": scope,
+            "stored_at": str(target_path),
             "stored_mode": "0600",
             "fields": [
                 "apiKey",
@@ -278,10 +291,12 @@ def main() -> int:
         return 1
 
     api_check = check_api(state.creds["apiBaseUrl"], state.creds["apiKey"])
+    _, scope = config_target(Path.cwd())
     result = {
         "status": "ok",
         "agent": "hermes",
         "instance_hint": hint,
+        "config_scope": scope,
         "projectName": state.creds["projectName"],
         "clientName": state.creds.get("clientName") or None,
         "config_path": config_path,
