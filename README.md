@@ -11,7 +11,8 @@ What it does:
 ## Features
 
 - Hermes-native plugin hooks instead of Claude/Cursor/Codex hook files
-- Local-only credentials at `~/.hermes/klokkan/config.json`
+- Repo-local credentials by default at `<repo>/.klokkan.json` when you connect from inside a git repository
+- Global fallback credentials at `~/.hermes/klokkan/config.json` only when you connect outside a git repository
 - Optional per-repo `klokkan.md` files for repo-specific hint and description overrides
 - Config file permissions set to `0600`
 - Error logging to `~/.cache/klokkan/last-error.log`
@@ -72,7 +73,7 @@ python3 ~/.hermes/plugins/klokkan/connect.py --dry-run
 Expected properties:
 - `agent: hermes`
 - `frontend_url: https://klokkan.usable.dev`
-- config target at `~/.hermes/klokkan/config.json`
+- config target at `<repo>/.klokkan.json` when run inside a git repo, otherwise `~/.hermes/klokkan/config.json`
 - no side effects in dry-run mode
 
 ### 5. Connect to Klokkan
@@ -87,13 +88,21 @@ The helper prints a single line:
 OPEN_URL=<authorize-url>
 ```
 
-Open that URL in your browser. After you choose the org/project in the Klokkan dashboard, the browser posts credentials directly to the local helper over `127.0.0.1`, and the helper writes:
+Open that URL in your browser. After you choose the org/project in the Klokkan dashboard, the browser posts credentials directly to the local helper over `127.0.0.1`, and the helper writes credentials to:
+
+```text
+<repo>/.klokkan.json
+```
+
+when you run the helper inside a git repo. That file is added to `.git/info/exclude` automatically so it stays local-only.
+
+When you run the helper outside a git repo, it falls back to:
 
 ```text
 ~/.hermes/klokkan/config.json
 ```
 
-with mode `0600`.
+In both cases the file is written with mode `0600`.
 
 ## Per-repo overrides with `klokkan.md`
 
@@ -119,7 +128,7 @@ Behavior:
 - timer descriptions become `<description_prefix> — <prompt excerpt>`
 - the start label still includes the current git branch when available
 
-This makes it easy to keep one Hermes/Klokkan connection while still attributing work to repos such as `mickey-scoreboard` or `argilzar-workouts`.
+This makes it easy to keep per-repo Klokkan API keys while still controlling the visible repo label and timer description for each project.
 
 ## Security model
 
@@ -132,10 +141,11 @@ This makes it easy to keep one Hermes/Klokkan connection while still attributing
 
 ### `pre_llm_call`
 On every Hermes user prompt, the plugin:
-1. Loads local Klokkan config
-2. Starts or resumes the running timer using a label derived from hint + branch
-3. Extracts up to 120 characters from the current prompt
-4. PATCHes the running timer description with `onlyIfPlaceholder: true`
+1. Loads repo-local Klokkan config from `<repo>/.klokkan.json` when inside a git repo
+2. Falls back to `~/.hermes/klokkan/config.json` only when not inside a git repo
+3. Starts or resumes the running timer using a label derived from hint + branch
+4. Extracts up to 120 characters from the current prompt
+5. PATCHes the running timer description with `onlyIfPlaceholder: true`
 
 ### `on_session_finalize`
 When Hermes finalizes a session, the plugin sends a stop request to Klokkan.
@@ -143,6 +153,7 @@ When Hermes finalizes a session, the plugin sends a stop request to Klokkan.
 ## Caveats
 
 - If Hermes crashes hard or is killed before `on_session_finalize` runs, the timer may remain running until you stop it manually.
+- Inside a git repo, no timer calls are made until that repo has its own `.klokkan.json` credentials file.
 - This implementation is Hermes-specific and does not attempt to emulate agent integrations for other tools.
 
 ## Development

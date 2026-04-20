@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .common import excerpt as _excerpt
+from .common import project_config_path as _project_config_path
 from .common import with_context as _with_context
 
 CONFIG_PATH = Path.home() / ".hermes" / "klokkan" / "config.json"
@@ -25,20 +26,31 @@ def _log_error(tag: str, message: str) -> None:
         pass
 
 
-def _load_config() -> dict[str, Any] | None:
-    if not CONFIG_PATH.exists():
-        return None
+def _read_config(path: Path) -> dict[str, Any] | None:
     try:
-        data = json.loads(CONFIG_PATH.read_text())
+        data = json.loads(path.read_text())
     except Exception as exc:
-        _log_error("config", f"failed to read {CONFIG_PATH}: {exc}")
+        _log_error("config", f"failed to read {path}: {exc}")
         return None
     required = ("apiKey", "projectId", "projectName", "apiBaseUrl")
     missing = [k for k in required if not data.get(k)]
     if missing:
-        _log_error("config", f"missing required keys: {', '.join(missing)}")
+        _log_error("config", f"missing required keys in {path}: {', '.join(missing)}")
         return None
     return data
+
+
+def _load_config() -> dict[str, Any] | None:
+    cwd = Path.cwd()
+    repo_config = _project_config_path(cwd)
+    if repo_config:
+        if not repo_config.exists():
+            _log_error("config", f"missing repo-local config for {cwd}: {repo_config}")
+            return None
+        return _read_config(repo_config)
+    if not CONFIG_PATH.exists():
+        return None
+    return _read_config(CONFIG_PATH)
 
 
 def _session_suffix(session_id: Any) -> str:

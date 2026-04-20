@@ -7,6 +7,7 @@ from typing import Any
 
 PROMPT_EXCERPT_CHARS = 120
 REPO_CONFIG_FILENAME = "klokkan.md"
+PROJECT_CONFIG_FILENAME = ".klokkan.json"
 _ALLOWED_KEYS = {
     "hint": "hint",
     "project": "hint",
@@ -29,10 +30,57 @@ def git(args: list[str], cwd: Path) -> str:
         return ""
 
 
+def _dot_git_root(cwd: Path) -> Path | None:
+    for directory in _candidate_dirs(cwd):
+        if (directory / ".git").exists():
+            return directory
+    return None
+
 
 def resolve_repo_root(cwd: Path) -> Path:
     root = git(["rev-parse", "--show-toplevel"], cwd)
-    return Path(root) if root else cwd
+    if root:
+        return Path(root)
+    return _dot_git_root(cwd) or cwd
+
+
+def in_git_repo(cwd: Path) -> bool:
+    return bool(git(["rev-parse", "--show-toplevel"], cwd) or _dot_git_root(cwd))
+
+
+def project_config_path(cwd: Path) -> Path | None:
+    if not in_git_repo(cwd):
+        return None
+    return resolve_repo_root(cwd) / PROJECT_CONFIG_FILENAME
+
+
+def git_exclude_path(cwd: Path) -> Path | None:
+    git_path = git(["rev-parse", "--git-path", "info/exclude"], cwd)
+    if git_path:
+        resolved = Path(git_path)
+        if not resolved.is_absolute():
+            resolved = (cwd / resolved).resolve()
+        return resolved
+    if not in_git_repo(cwd):
+        return None
+    return resolve_repo_root(cwd) / ".git" / "info" / "exclude"
+
+
+def ensure_project_config_ignored(cwd: Path) -> Path | None:
+    exclude_path = git_exclude_path(cwd)
+    if not exclude_path:
+        return None
+    exclude_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        existing = exclude_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        existing = ""
+    entries = {line.strip() for line in existing.splitlines() if line.strip()}
+    if PROJECT_CONFIG_FILENAME not in entries:
+        prefix = "\n" if existing and not existing.endswith("\n") else ""
+        with exclude_path.open("a", encoding="utf-8") as fh:
+            fh.write(f"{prefix}{PROJECT_CONFIG_FILENAME}\n")
+    return exclude_path
 
 
 
