@@ -8,7 +8,7 @@ from unittest.mock import patch
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from plugin.klokkan import _on_pre_llm_call  # noqa: E402
+from plugin.klokkan import _on_pre_llm_call, _prompt_first_description  # noqa: E402
 
 
 class SessionTimerTests(unittest.TestCase):
@@ -35,17 +35,31 @@ class SessionTimerTests(unittest.TestCase):
         start_payload = captured_calls[0][3]
         self.assertEqual(
             start_payload,
-            {"description": "langastina [session:session-abc]"},
+            {"description": "Debug timer bug — langastina [session:session-abc]"},
         )
 
         running_payload = captured_calls[1][3]
         self.assertEqual(
             running_payload,
             {
-                "description": "langastina [session:session-abc] — Debug timer bug",
+                "description": "Debug timer bug — langastina [session:session-abc]",
                 "onlyIfPlaceholder": True,
             },
         )
+
+    def test_prompt_first_description_falls_back_to_context_without_prompt(self) -> None:
+        cfg = {
+            "apiKey": "***",
+            "apiBaseUrl": "https://klokkan.example",
+            "hint": "langastina",
+            "projectId": "project-123",
+            "projectName": "Langastina",
+        }
+
+        with patch("plugin.klokkan._with_context", side_effect=lambda cfg, suffix="": f"langastina {suffix}".strip()):
+            description = _prompt_first_description(cfg, "", session_id="session-abc")
+
+        self.assertEqual(description, "langastina [session:session-abc]")
 
 
 if __name__ == "__main__":

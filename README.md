@@ -4,7 +4,7 @@ A Hermes Agent plugin that integrates Klokkan time tracking with Hermes session 
 
 What it does:
 - Starts or resumes a Klokkan timer on each Hermes user prompt via `pre_llm_call`
-- Refines the timer description from the current prompt excerpt without overwriting an already-refined entry
+- Refines the timer description from the current prompt excerpt without overwriting an already-refined entry; visible descriptions put the prompt/work text first, followed by repo/session context
 - Stops the timer when Hermes finalizes a session via `on_session_finalize`
 - Uses a local loopback browser flow to receive credentials directly from the Klokkan dashboard and store them only on the local machine
 
@@ -125,7 +125,7 @@ Supported frontmatter keys:
 Behavior:
 - the plugin searches upward from the current working directory to the git repo root for `klokkan.md`
 - if found, the repo file wins over the saved `hint` in `~/.hermes/klokkan/config.json`
-- timer descriptions become `<description_prefix> — <prompt excerpt>`
+- timer descriptions become `<prompt excerpt> — <description_prefix> [session:<session_id>]` so the prompt/work text is the first visible text
 - the start label still includes the current git branch when available
 
 This makes it easy to keep per-repo Klokkan API keys while still controlling the visible repo label and timer description for each project.
@@ -143,7 +143,7 @@ This makes it easy to keep per-repo Klokkan API keys while still controlling the
 On every Hermes user prompt, the plugin:
 1. Loads repo-local Klokkan config from `<repo>/.klokkan.json` when inside a git repo
 2. Falls back to `~/.hermes/klokkan/config.json` only when not inside a git repo
-3. Starts or resumes the running timer using a label derived from hint + branch
+3. Starts or resumes the running timer using a description whose first text is the current prompt excerpt, followed by hint + branch/session context
 4. Extracts up to 120 characters from the current prompt
 5. PATCHes the running timer description with `onlyIfPlaceholder: true`
 
