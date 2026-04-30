@@ -8,7 +8,7 @@ from unittest.mock import patch
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from plugin.klokkan import _on_pre_llm_call, _prompt_first_description  # noqa: E402
+from plugin.klokkan import _on_pre_llm_call, _on_session_end, _prompt_first_description  # noqa: E402
 
 
 class SessionTimerTests(unittest.TestCase):
@@ -45,6 +45,30 @@ class SessionTimerTests(unittest.TestCase):
                 "description": "Debug timer bug — langastina [session:session-abc]",
                 "onlyIfPlaceholder": True,
             },
+        )
+
+    def test_on_session_end_stops_timer_when_turn_is_idle(self) -> None:
+        cfg = {
+            "apiKey": "***",
+            "apiBaseUrl": "https://klokkan.example",
+            "hint": "langastina",
+            "projectId": "project-123",
+            "projectName": "Langastina",
+        }
+        captured_calls: list[tuple[str, str, str, dict[str, str] | None]] = []
+
+        def fake_request_json(method: str, url: str, api_key: str, payload: dict[str, str] | None = None):
+            captured_calls.append((method, url, api_key, payload))
+            return True, 200, "{}"
+
+        with patch("plugin.klokkan._load_config", return_value=cfg), patch(
+            "plugin.klokkan._request_json", side_effect=fake_request_json
+        ):
+            _on_session_end(session_id="session-abc", completed=True, interrupted=False)
+
+        self.assertEqual(
+            captured_calls,
+            [("POST", "https://klokkan.example/api/v1/agent/timer/stop", "***", None)],
         )
 
     def test_prompt_first_description_falls_back_to_context_without_prompt(self) -> None:

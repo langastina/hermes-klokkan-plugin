@@ -153,17 +153,26 @@ def _on_pre_llm_call(user_message: str = "", session_id: Any = None, **kwargs: A
     return None
 
 
-def _on_session_finalize(**kwargs: Any) -> None:
+def _stop_on_idle(tag: str) -> None:
     cfg = _load_config()
     if not cfg:
         return None
     try:
         _stop_timer(cfg)
     except Exception as exc:
-        _log_error("on_session_finalize", str(exc))
+        _log_error(tag, str(exc))
     return None
+
+
+def _on_session_end(**kwargs: Any) -> None:
+    return _stop_on_idle("on_session_end")
+
+
+def _on_session_finalize(**kwargs: Any) -> None:
+    return _stop_on_idle("on_session_finalize")
 
 
 def register(ctx) -> None:
     ctx.register_hook("pre_llm_call", _on_pre_llm_call)
+    ctx.register_hook("on_session_end", _on_session_end)
     ctx.register_hook("on_session_finalize", _on_session_finalize)
