@@ -5,7 +5,7 @@ A Hermes Agent plugin that integrates Klokkan time tracking with Hermes session 
 What it does:
 - Starts or resumes a Klokkan timer on each Hermes user prompt via `pre_llm_call`
 - Refines the timer description from the current prompt excerpt without overwriting an already-refined entry; visible descriptions put the prompt/work text first, followed by repo/session context
-- Stops the timer when Hermes finalizes a session via `on_session_finalize`
+- Stops the timer when Hermes finishes a prompt and returns to waiting for input via `on_session_end`, and also when Hermes finalizes a session via `on_session_finalize`
 - Uses a local loopback browser flow to receive credentials directly from the Klokkan dashboard and store them only on the local machine
 
 ## Features
@@ -147,12 +147,15 @@ On every Hermes user prompt, the plugin:
 4. Extracts up to 120 characters from the current prompt
 5. PATCHes the running timer description with `onlyIfPlaceholder: true`
 
+### `on_session_end`
+When Hermes finishes a `run_conversation` turn and returns to the idle prompt, the plugin sends a stop request to Klokkan. The next user prompt starts or resumes timing again through `pre_llm_call`.
+
 ### `on_session_finalize`
-When Hermes finalizes a session, the plugin sends a stop request to Klokkan.
+When Hermes finalizes a session, the plugin also sends a stop request to Klokkan as a cleanup safety net.
 
 ## Caveats
 
-- If Hermes crashes hard or is killed before `on_session_finalize` runs, the timer may remain running until you stop it manually.
+- If Hermes crashes hard or is killed before `on_session_end` or `on_session_finalize` runs, the timer may remain running until you stop it manually.
 - Inside a git repo, no timer calls are made until that repo has its own `.klokkan.json` credentials file.
 - This implementation is Hermes-specific and does not attempt to emulate agent integrations for other tools.
 
